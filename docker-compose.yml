@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: system1
+      MYSQL_USER: user
+      MYSQL_PASSWORD: pass
+    ports:
+      - "3308:3306"
+    volumes:
+      - ./db/system1/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql
+      - ./db/system1/sample_data.sql:/docker-entrypoint-initdb.d/2-data.sql
+
+  mariadb:
+    image: mariadb:10.5
+    container_name: mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: system2
+      MYSQL_USER: user
+      MYSQL_PASSWORD: pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./db/system2/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql
+      - ./db/system2/sample_data.sql:/docker-entrypoint-initdb.d/2-data.sql
+
+  laravel:
+    build: ./laravel
+    container_name: laravel_app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./laravel:/var/www/html
+    depends_on:
+      - mysql
+    command: >
+      sh -c "
+        if [ ! -f artisan ]; then
+          echo 'Installing Laravel into temp directory...' &&
+          rm -rf /tmp/laravel &&  # 🧹 Clear the temp folder
+          composer create-project laravel/laravel /tmp/laravel --no-interaction &&
+          echo 'Copying Laravel files into mounted volume...' &&
+          cp -rn /tmp/laravel/* . &&
+          cp -rn /tmp/laravel/.* . 2>/dev/null || true
+        fi &&
+        php artisan key:generate &&
+        php artisan serve --host=0.0.0.0 --port=8000
+      "
+
+  codeigniter:
+    build: ./codeigniter
+    container_name: codeigniter_app
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./codeigniter:/var/www/html
+    depends_on:
+      - mariadb
+    working_dir: /var/www/html
+    command: >
+      sh -c "
+        if [ ! -f spark ]; then
+          echo '🔧 Installing CodeIgniter...' &&
+          composer create-project codeigniter4/appstarter /tmp/codeigniter --no-interaction &&
+          cp -rn /tmp/codeigniter/* . &&
+          cp -rn /tmp/codeigniter/.* . 2>/dev/null || true
+        fi &&
+        php spark serve --host=0.0.0.0 --port=8080
+      "
+
+  phpmyadmin:
+    image: phpmyadmin
+    restart: always
+    ports:
+      - "8060:80"
+    environment:
+      - PMA_ARBITRARY=1
